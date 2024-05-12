@@ -5,9 +5,7 @@ use embedded_graphics::{
     pixelcolor::{raw::RawU16, Rgb565},
     prelude::*,
 };
-
-use embedded_hal::blocking::spi;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::{digital::OutputPin, spi::SpiDevice};
 
 #[derive(Debug)]
 pub struct CommError;
@@ -795,27 +793,23 @@ const CONFIG: [GC9A01Step; 188] = [
 ];
 
 /// GC9A01 driver
-pub struct GC9A01<SPI, CS, DC> {
+pub struct GC9A01<SPI, DC> {
     pub spi: SPI,
-    pub cs: CS,
     pub dc: DC,
 }
 
-impl<SPI, CS, DC, E, PinError> GC9A01<SPI, CS, DC>
+impl<SPI, DC> GC9A01<SPI, DC>
 where
-    SPI: spi::Write<u8, Error = E>,
-    CS: OutputPin<Error = PinError>,
-    DC: OutputPin<Error = PinError>,
+    SPI: SpiDevice<u8>,
+    DC: OutputPin,
 {
-    pub fn default(spi: SPI, cs: CS, dc: DC) -> Result<Self, E> {
-        GC9A01::new(spi, cs, dc)
+    pub fn default(spi: SPI, dc: DC) -> Self {
+        GC9A01::new(spi, dc)
     }
 
     /// Takes a CONFIG object to initialize the adxl355 driver
-    pub fn new(spi: SPI, cs: CS, dc: DC) -> Result<Self, E> {
-        let gc9a01 = GC9A01 { spi, cs, dc };
-
-        Ok(gc9a01)
+    pub fn new(spi: SPI, dc: DC) -> Self {
+        GC9A01 { spi, dc }
     }
 
     pub fn setup(&mut self) {
@@ -834,17 +828,13 @@ where
     }
 
     fn command(&mut self, cmd: u8) {
-        self.cs.set_low().ok();
         self.dc.set_low().ok();
-        self.spi.write(&[cmd]).unwrap_or_else(|_err| {});
-        self.cs.set_high().ok();
+        self.spi.write(&[cmd]).unwrap()
     }
 
     fn data(&mut self, data: u8) {
-        self.cs.set_low().ok();
         self.dc.set_high().ok();
-        self.spi.write(&[data]).unwrap_or_else(|_err| {});
-        self.cs.set_high().ok();
+        self.spi.write(&[data]).unwrap()
     }
 
     fn fill_rect(&mut self, x: u16, y: u16, w: u16, h: u16, color: u16) {
@@ -902,22 +892,20 @@ where
     }
 }
 
-impl<SPI, CS, DC, E, PinError> OriginDimensions for GC9A01<SPI, CS, DC>
+impl<SPI, DC> OriginDimensions for GC9A01<SPI, DC>
 where
-    SPI: spi::Write<u8, Error = E>,
-    CS: OutputPin<Error = PinError>,
-    DC: OutputPin<Error = PinError>,
+    SPI: SpiDevice<u8>,
+    DC: OutputPin,
 {
     fn size(&self) -> Size {
         Size::new(240, 240)
     }
 }
 
-impl<SPI, CS, DC, E, PinError> DrawTarget for GC9A01<SPI, CS, DC>
+impl<SPI, DC> DrawTarget for GC9A01<SPI, DC>
 where
-    SPI: spi::Write<u8, Error = E>,
-    CS: OutputPin<Error = PinError>,
-    DC: OutputPin<Error = PinError>,
+    SPI: SpiDevice,
+    DC: OutputPin,
 {
     type Color = Rgb565;
     type Error = CommError;
@@ -931,19 +919,10 @@ where
                 coord.x as u32,
                 coord.y as u32,
                 RawU16::from(color).into_inner(),
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn it_works() {
-        let result = 4;
-        assert_eq!(result, 4);
     }
 }
